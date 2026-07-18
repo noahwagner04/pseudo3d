@@ -2,11 +2,13 @@
 
 A collection of stb-style single-header libraries written in C99 for pseudo-3D rendering.
 
-- **Software rendered** — output is a plain RGBA32 pixel buffer; bring any graphics/window library (SDL, raylib, a terminal, ...) to display it (see examples)
+- **Software rendered** — output is a plain RGBA32 pixel buffer; use any graphics/window library (SDL, raylib, a terminal, ...) to display it (see examples)
 - **Zero dependencies** — C99 + libc, no heap allocation; all buffers are provided by the caller
 - **Multi-threading friendly** — render targets can be split into column slices, letting you call render functions from multiple threads
 
 ## Raycast (`p3d_raycast.h`)
+
+![raycast demo](media/raycast.gif)
 
 A simple raycast engine in the spirit of Wolfenstein 3D. The core is based on Lode Vandevenne's [excellent tutorial series](https://lodev.org/cgtutor/raycasting.html), with several additions:
 
