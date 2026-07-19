@@ -17,6 +17,9 @@
 
 #define MAP_WIDTH 24
 #define MAP_HEIGHT 24
+
+#define SPRITE_COUNT 100
+
 char map_str[MAP_WIDTH * MAP_HEIGHT] =
     "AAAAAAAAAAAAAAAAAAAAAAAA"
     "A......................A"
@@ -61,15 +64,45 @@ p3drc_Tile legend[128] = {
 
 p3drc_Tile tiles[MAP_WIDTH * MAP_HEIGHT];
 double z_buffer[RENDER_WIDTH];
-
-p3drc_Scene scene;
-p3drc_Camera camera = { .FOV = 0.66, .pos_x = 22, .pos_y = 12, .pos_z = 0.5, .dir_x = -1, .dir_y = 0 };
-p3drc_Target target = { .width = RENDER_WIDTH, .height = RENDER_HEIGHT, .z_buffer = z_buffer, .aspect_ratio = (double)RENDER_WIDTH / RENDER_HEIGHT };
-
-#define SPRITE_COUNT 100
-p3drc_Sprite sprites[SPRITE_COUNT];
-
 SDL_Surface *atlas_img;
+
+p3drc_Scene scene = {
+    .map = {
+        .tiles = tiles,
+        .width = MAP_WIDTH,
+        .height = MAP_HEIGHT,
+        .floor_tex = 11,
+        .ceiling_tex = 7
+    },
+    .atlas = { 0 },
+    .light = {
+        .red = 1.0, .green = 1.0, .blue = 1.0,
+        .falloff = 1.0,
+        .ambient = 1.0,
+        .brightness = 1.0,
+        .shade_strength = 0.5,
+        .shade_face = P3DRC_SIDE_H
+    },
+    .fog = {
+        .red = 1.0, .green = 1.0, .blue = 1.0,
+        .density = 0.0
+    }
+};
+
+p3drc_Camera camera = {
+    .FOV = 0.66,
+    .pos_x = 22, .pos_y = 12, .pos_z = 0.5,
+    .dir_x = -1, .dir_y = 0
+};
+
+p3drc_Target target = {
+    .pixels = NULL,
+    .width = RENDER_WIDTH, .height = RENDER_HEIGHT,
+    .z_buffer = z_buffer,
+    .aspect_ratio = (double)RENDER_WIDTH / RENDER_HEIGHT
+};
+
+p3drc_Sprite sprites[SPRITE_COUNT];
 
 struct app_state {
     SDL_Window *window;
@@ -77,8 +110,53 @@ struct app_state {
     SDL_Texture *texture;
 };
 
-void raycast_render(struct app_state *app)
-{
+SDL_AppResult raycast_init(struct app_state *app) {
+    // initalize target texture
+    app->texture = SDL_CreateTexture(app->renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH, RENDER_HEIGHT);
+    if (app->texture == NULL) {
+        SDL_Log("SDL_CreateTexture() failed: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    SDL_SetTextureScaleMode(app->texture, SDL_SCALEMODE_NEAREST);
+
+    // load atlas image
+    atlas_img = SDL_LoadPNG("atlas.png");
+    if (atlas_img == NULL) {
+        SDL_Log("SDL_LoadPNG() failed: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    if (atlas_img->format != SDL_PIXELFORMAT_RGBA32) {
+        SDL_Log("Texture atlas does not match expected pixel format RGBA32");
+        return SDL_APP_FAILURE;
+    }
+
+    scene.atlas = (p3drc_Atlas) {
+        .pixels = atlas_img->pixels,
+        .pitch = atlas_img->pitch,
+        .width = atlas_img->w,
+        .height = atlas_img->h,
+        .subimage_size = 64,
+        ._cols = atlas_img->w / 64,
+        ._rows = atlas_img->h / 64
+    };
+
+    // build tile map from int codes
+    for (int i = 0; i < MAP_WIDTH * MAP_HEIGHT; i++)
+        tiles[i] = legend[(unsigned char)map_str[i]];
+
+    // spawn random sprites
+    for (int i = 0; i < SPRITE_COUNT; i++) {
+        sprites[i].pos_x = SDL_randf() * MAP_WIDTH;
+        sprites[i].pos_y = SDL_randf() * MAP_HEIGHT;
+        sprites[i].texture = i % 4 + 12;
+        sprites[i].flags = sprites[i].texture == 12 ? P3DRC_SPRITE_NO_LIGHTING : 0;
+    }
+    return SDL_APP_CONTINUE;
+}
+
+void raycast_render(struct app_state *app) {
     int pitch;
     SDL_LockTexture(app->texture, NULL, (void **)&target.pixels, &pitch);
     target.pitch = pitch;
@@ -87,8 +165,8 @@ void raycast_render(struct app_state *app)
     SDL_RenderTexture(app->renderer, app->texture, NULL, NULL);
 }
 
-SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
-{
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
+    (void)argc; (void)argv;
     *appstate = malloc(sizeof(struct app_state));
     struct app_state *app = *appstate;
 
@@ -104,71 +182,10 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     SDL_SetRenderVSync(app->renderer, 1);
 
-    app->texture = SDL_CreateTexture(app->renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH, RENDER_HEIGHT);
-    if (app->texture == NULL) {
-        SDL_Log("SDL_CreateTexture() failed: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    SDL_SetTextureScaleMode(app->texture, SDL_SCALEMODE_NEAREST);
-
-    atlas_img = SDL_LoadPNG("atlas.png");
-    if (atlas_img == NULL) {
-        SDL_Log("SDL_LoadPNG() failed: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    if (atlas_img->format != SDL_PIXELFORMAT_RGBA32) {
-        SDL_Log("Texture atlas does not match expected pixel format RGBA32");
-        return SDL_APP_FAILURE;
-    }
-
-    // build tile map from int codes
-    for (int i = 0; i < MAP_WIDTH * MAP_HEIGHT; i++)
-        tiles[i] = legend[(unsigned char)map_str[i]];
-
-    scene = (p3drc_Scene){
-        .map = {
-            .tiles = tiles,
-            .width = MAP_WIDTH,
-            .height = MAP_HEIGHT,
-            .floor_tex = 11,
-            .ceiling_tex = 7
-        },
-        .atlas = {
-            .pixels = atlas_img->pixels,
-            .pitch = atlas_img->pitch,
-            .width = atlas_img->w,
-            .height = atlas_img->h,
-            .subimage_size = 64,
-            ._cols = atlas_img->w / 64,
-            ._rows = atlas_img->h / 64
-        },
-        .light = {
-            .red = 1.0, .green = 1.0, .blue = 1.0,
-            .falloff = 1.0,
-            .ambient = 1.0,
-            .brightness = 1.0,
-            .shade_strength = 0.5,
-            .shade_face = P3DRC_SIDE_H
-        },
-        .fog = {
-            .red = 1.0, .green = 1.0, .blue = 1.0,
-            .density = 0.0
-        }
-    };
-
-    for (int i = 0; i < SPRITE_COUNT; i++) {
-        sprites[i].pos_x = SDL_randf() * MAP_WIDTH;
-        sprites[i].pos_y = SDL_randf() * MAP_HEIGHT;
-        sprites[i].texture = i % 4 + 12;
-        sprites[i].flags = sprites[i].texture == 12 ? P3DRC_SPRITE_NO_LIGHTING : 0;
-    }
-    return SDL_APP_CONTINUE;
+    return raycast_init(app);
 }
 
-SDL_AppResult SDL_AppIterate(void *appstate)
-{
+SDL_AppResult SDL_AppIterate(void *appstate) {
     struct app_state *app = appstate;
 
     const bool *key_states = SDL_GetKeyboardState(NULL);
@@ -240,8 +257,8 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     return SDL_APP_CONTINUE;
 }
 
-SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
-{
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
+    (void)appstate;
     switch (event->type) {
     case SDL_EVENT_QUIT:
         return SDL_APP_SUCCESS;
@@ -258,8 +275,8 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
     return SDL_APP_CONTINUE;
 }
 
-void SDL_AppQuit(void *appstate, SDL_AppResult result)
-{
+void SDL_AppQuit(void *appstate, SDL_AppResult result) {
+    (void)result;
     struct app_state *app = appstate;
     SDL_DestroyRenderer(app->renderer);
     SDL_DestroyWindow(app->window);
