@@ -278,28 +278,43 @@ void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
     for (int y = draw_start; y < draw_end; y++) {
         double p = y + 0.5 - horizon;
         double v_dist = (height - camera->pos_z) * target->height;
-        double row_dist = p == 0 ? 1e30 : fabs(v_dist / p);
+
+        // cap dist at some arbitrary large distance to avoid inf
+        double row_dist = fmin(fabs(v_dist / p), 16384.0);
         double step_x = (ray_dir_xr - ray_dir_xl) * row_dist / target->width;
         double step_y = (ray_dir_yr - ray_dir_yl) * row_dist / target->width;
         double world_x = camera->pos_x + ray_dir_xl * row_dist + step_x * target->start;
         double world_y = camera->pos_y + ray_dir_yl * row_dist + step_y * target->start;
         double light = p3drc__get_light(scene, row_dist * camera->FOV, -1);
         double fog = p3drc__get_fog(scene, row_dist * camera->FOV);
-        for (int x = target->start; x < target->end; x++) {
-            int i = x * 4 + y * target->pitch;
-            int tex_x = base_tex_x + (world_x - floor(world_x)) * scene->atlas.subimage_size;
-            int tex_y = base_tex_y + (world_y - floor(world_y)) * scene->atlas.subimage_size;
-            int atlas_i = tex_x * 4 + tex_y * scene->atlas.pitch;
-            uint8_t *c = scene->atlas.pixels + atlas_i;
-            double r = (1.0 - fog) * c[0] * lr * light + fog * fr * 255.0;
-            double g = (1.0 - fog) * c[1] * lg * light + fog * fg * 255.0;
-            double b = (1.0 - fog) * c[2] * lb * light + fog * fb * 255.0;
-            target->pixels[i + 0] = r > 255 ? 255 : r;
-            target->pixels[i + 1] = g > 255 ? 255 : g;
-            target->pixels[i + 2] = b > 255 ? 255 : b;
-            target->pixels[i + 3] = 0xFF;
-            world_x += step_x;
-            world_y += step_y;
+ 
+        // 32.32 fixed-point world coordinates
+        int64_t wx = (int64_t)(world_x * 4294967296.0);
+        int64_t wy = (int64_t)(world_y * 4294967296.0);
+        int64_t sx = (int64_t)(step_x * 4294967296.0);
+        int64_t sy = (int64_t)(step_y * 4294967296.0);
+ 
+        // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
+        int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
+        int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
+        int32_t br = (int32_t)(fog * fr * 255.0 * 65536.0);
+        int32_t bg = (int32_t)(fog * fg * 255.0 * 65536.0);
+        int32_t bb = (int32_t)(fog * fb * 255.0 * 65536.0);
+ 
+        int sub = scene->atlas.subimage_size;
+        uint8_t *out = target->pixels + target->start * 4 + y * target->pitch;
+        for (int x = target->start; x < target->end; x++, wx += sx, wy += sy, out += 4) {
+            int tex_x = base_tex_x + (int)(((wx & 0xFFFFFFFF) * sub) >> 32);
+            int tex_y = base_tex_y + (int)(((wy & 0xFFFFFFFF) * sub) >> 32);
+            uint8_t *c = scene->atlas.pixels + tex_x * 4 + tex_y * scene->atlas.pitch;
+            int32_t r = (c[0] * ar + br) >> 16;
+            int32_t g = (c[1] * ag + bg) >> 16;
+            int32_t b = (c[2] * ab + bb) >> 16;
+            out[0] = r > 255 ? 255 : r;
+            out[1] = g > 255 ? 255 : g;
+            out[2] = b > 255 ? 255 : b;
+            out[3] = 0xFF;
         }
     }
 }
@@ -359,22 +374,31 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         if (draw_end > target->height) draw_end = target->height;
 
         double step = sub / (bottom - top);
+        // 16.16 fixed-point for texture sampling
         uint32_t step_fp = (uint32_t)(step * 65536.0);
         uint32_t tex_y_fp = (uint32_t)((draw_start + 0.5 - top) * step * 65536.0);
 
         double light = p3drc__get_light(scene, hit.depth * camera->FOV, hit.side);
         double fog = p3drc__get_fog(scene, hit.depth * camera->FOV);
-        for (int y = draw_start; y < draw_end; y++, tex_y_fp += step_fp) {
-            int i = x * 4 + y * target->pitch;
-            int atlas_i = tex_x * 4 + ((tex_y_fp >> 16) + y_offset) * scene->atlas.pitch;
-            uint8_t *c = scene->atlas.pixels + atlas_i;
-            double r = (1.0 - fog) * c[0] * lr * light + fog * fr * 255.0;
-            double g = (1.0 - fog) * c[1] * lg * light + fog * fg * 255.0;
-            double b = (1.0 - fog) * c[2] * lb * light + fog * fb * 255.0;
-            target->pixels[i + 0] = r > 255 ? 255 : r;
-            target->pixels[i + 1] = g > 255 ? 255 : g;
-            target->pixels[i + 2] = b > 255 ? 255 : b;
-            target->pixels[i + 3] = 0xFF;
+
+        // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
+        int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
+        int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
+        int32_t br = (int32_t)(fog * fr * 255.0 * 65536.0);
+        int32_t bg = (int32_t)(fog * fg * 255.0 * 65536.0);
+        int32_t bb = (int32_t)(fog * fb * 255.0 * 65536.0);
+
+        uint8_t *out = target->pixels + x * 4 + draw_start * target->pitch;
+        for (int y = draw_start; y < draw_end; y++, tex_y_fp += step_fp, out += target->pitch) {
+            uint8_t *c = scene->atlas.pixels + tex_x * 4 + ((tex_y_fp >> 16) + y_offset) * scene->atlas.pitch;
+            int32_t r = (c[0] * ar + br) >> 16;
+            int32_t g = (c[1] * ag + bg) >> 16;
+            int32_t b = (c[2] * ab + bb) >> 16;
+            out[0] = r > 255 ? 255 : r;
+            out[1] = g > 255 ? 255 : g;
+            out[2] = b > 255 ? 255 : b;
+            out[3] = 0xFF;
         }
     }
 }
@@ -433,25 +457,36 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
         double light = flags & P3DRC_SPRITE_NO_LIGHTING ? 1.0 : p3drc__get_light(scene, local_y * camera->FOV, -1);
         double fog = flags & P3DRC_SPRITE_NO_FOG ? 0.0 : p3drc__get_fog(scene, local_y * camera->FOV);
 
-        double tex_x_f = (draw_start_x + 0.5 - sprite_left) * step_x;
-        for (int x = draw_start_x; x < draw_end_x; x++, tex_x_f += step_x) {
-            if (local_y > target->z_buffer[x]) continue;
-            int tex_x = base_tex_x + (int)tex_x_f;
+        // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
+        int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
+        int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
+        int32_t br = (int32_t)(fog * fr * 255.0 * 65536.0);
+        int32_t bg = (int32_t)(fog * fg * 255.0 * 65536.0);
+        int32_t bb = (int32_t)(fog * fb * 255.0 * 65536.0);
 
-            double tex_y_f = (draw_start_y + 0.5 - sprite_top) * step_y;
-            for (int y = draw_start_y; y < draw_end_y; y++, tex_y_f += step_y) {
-                int i = x * 4 + y * target->pitch;
-                int tex_y = base_tex_y + (int)tex_y_f;
-                int atlas_i = tex_x * 4 + tex_y * scene->atlas.pitch;
-                uint8_t *c = scene->atlas.pixels + atlas_i;
+        // 16.16 fixed-point for texture sampling
+        int32_t step_x_fp = (int32_t)(step_x * 65536.0);
+        int32_t step_y_fp = (int32_t)(step_y * 65536.0);
+        int32_t tex_x_fp = (int32_t)((draw_start_x + 0.5 - sprite_left) * step_x * 65536.0);
+        int32_t tex_y_fp0 = (int32_t)((draw_start_y + 0.5 - sprite_top) * step_y * 65536.0);
+
+        for (int x = draw_start_x; x < draw_end_x; x++, tex_x_fp += step_x_fp) {
+            if (local_y > target->z_buffer[x]) continue;
+            int tex_x = base_tex_x + (tex_x_fp >> 16);
+
+            uint32_t tex_y_fp = tex_y_fp0;
+            uint8_t *out = target->pixels + x * 4 + draw_start_y * target->pitch;
+            for (int y = draw_start_y; y < draw_end_y; y++, tex_y_fp += step_y_fp, out += target->pitch) {
+                uint8_t *c = scene->atlas.pixels + tex_x * 4 + (base_tex_y + (tex_y_fp >> 16)) * scene->atlas.pitch;
                 if (c[3] == 0) continue;
-                double r = (1.0 - fog) * c[0] * lr * light + fog * fr * 255.0;
-                double g = (1.0 - fog) * c[1] * lg * light + fog * fg * 255.0;
-                double b = (1.0 - fog) * c[2] * lb * light + fog * fb * 255.0;
-                target->pixels[i + 0] = r > 255 ? 255 : r;
-                target->pixels[i + 1] = g > 255 ? 255 : g;
-                target->pixels[i + 2] = b > 255 ? 255 : b;
-                target->pixels[i + 3] = 0xFF;
+                int32_t r = (c[0] * ar + br) >> 16;
+                int32_t g = (c[1] * ag + bg) >> 16;
+                int32_t b = (c[2] * ab + bb) >> 16;
+                out[0] = r > 255 ? 255 : r;
+                out[1] = g > 255 ? 255 : g;
+                out[2] = b > 255 ? 255 : b;
+                out[3] = 0xFF;
             }
         }
     }
