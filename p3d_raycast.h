@@ -329,11 +329,11 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         }
         target->z_buffer[x] = hit.depth;
 
-        double line_height = 1.0 / hit.depth;
-        double z_offset = camera->pos_z / hit.depth;
+        double horizon = (0.5 + camera->pitch) * target->height;
+        double inv_depth = 1.0 / hit.depth;
 
-        double top = (-line_height + 0.5 + z_offset + camera->pitch) * target->height;
-        double bottom = (0.5 + z_offset + camera->pitch) * target->height;
+        double top = horizon + (camera->pos_z - 1.0) * inv_depth * target->height;
+        double bottom = horizon + camera->pos_z * inv_depth * target->height;
 
         double wall_x;
         if (hit.side == P3DRC_SIDE_V) wall_x = camera->pos_y + hit.depth * ray_dir_y;
@@ -359,13 +359,14 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         if (draw_end > target->height) draw_end = target->height;
 
         double step = sub / (bottom - top);
-        double tex_y = (draw_start + 0.5 - top) * step + y_offset;
+        uint32_t step_fp = (uint32_t)(step * 65536.0);
+        uint32_t tex_y_fp = (uint32_t)((draw_start + 0.5 - top) * step * 65536.0);
 
         double light = p3drc__get_light(scene, hit.depth * camera->FOV, hit.side);
         double fog = p3drc__get_fog(scene, hit.depth * camera->FOV);
-        for (int y = draw_start; y < draw_end; y++, tex_y += step) {
+        for (int y = draw_start; y < draw_end; y++, tex_y_fp += step_fp) {
             int i = x * 4 + y * target->pitch;
-            int atlas_i = tex_x * 4 + (int)tex_y * scene->atlas.pitch;
+            int atlas_i = tex_x * 4 + ((tex_y_fp >> 16) + y_offset) * scene->atlas.pitch;
             uint8_t *c = scene->atlas.pixels + atlas_i;
             double r = (1.0 - fog) * c[0] * lr * light + fog * fr * 255.0;
             double g = (1.0 - fog) * c[1] * lg * light + fog * fg * 255.0;
