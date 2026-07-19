@@ -47,9 +47,9 @@ typedef struct p3drc_tile {
 #define P3DRC_DOOR_H(t, open_amt) ((p3drc_Tile){ .type = P3DRC_TILE_DOOR_H, .open = (open_amt), .tex = {(t), (t), (t), (t)} })
 #define P3DRC_DOOR_V(t, open_amt) ((p3drc_Tile){ .type = P3DRC_TILE_DOOR_V, .open = (open_amt), .tex = {(t), (t), (t), (t)} })
 
-// #define P3DRC_SPRITE_INVISIBLE   (1 << 0)
+#define P3DRC_SPRITE_INVISIBLE   (1 << 0)
 #define P3DRC_SPRITE_NO_LIGHTING (1 << 1)
-// #define P3DRC_SPRITE_NO_FOG      (1 << 2)
+#define P3DRC_SPRITE_NO_FOG      (1 << 2)
 
 typedef struct p3drc_hit {
     p3drc_Tile tile;
@@ -398,6 +398,7 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
         double rel_y = sprites[s].pos_y - camera->pos_y;
         int tex_num = sprites[s].texture;
         uint8_t flags = sprites[s].flags;
+        if (flags & P3DRC_SPRITE_INVISIBLE) continue;
 
         double inv_det = 1.0 / (plane_x * sdir_y - sdir_x * plane_y);
         double local_x = inv_det * (sdir_y * rel_x - sdir_x * rel_y);
@@ -429,7 +430,7 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
         int base_tex_y = tex_num / scene->atlas._cols * sub;
 
         double light = flags & P3DRC_SPRITE_NO_LIGHTING ? 1.0 : p3drc__get_light(scene, local_y * camera->FOV, -1);
-        double fog = p3drc__get_fog(scene, local_y * camera->FOV);
+        double fog = flags & P3DRC_SPRITE_NO_FOG ? 0.0 : p3drc__get_fog(scene, local_y * camera->FOV);
 
         double tex_x_f = (draw_start_x + 0.5 - sprite_left) * step_x;
         for (int x = draw_start_x; x < draw_end_x; x++, tex_x_f += step_x) {
