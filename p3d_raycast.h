@@ -228,15 +228,17 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
         }
     }
 
+    enum p3drc_face face;
+    if (side == P3DRC_SIDE_V) face = step_x < 0 ? P3DRC_FACE_E : P3DRC_FACE_W;
+    else face = step_y < 0 ? P3DRC_FACE_S : P3DRC_FACE_N;
+
     // started inside a solid tile: advance once so depth lands on the exit face
     if (entry == 0 && type == P3DRC_TILE_WALL) {
         sx += dx;
         sy += dy;
+        // reverse face (N <-> S, E <-> W)
+        face = (face + 2) % 4;
     }
-
-    enum p3drc_face face;
-    if (side == P3DRC_SIDE_V) face = step_x < 0 ? P3DRC_FACE_E : P3DRC_FACE_W;
-    else face = step_y < 0 ? P3DRC_FACE_S : P3DRC_FACE_N;
 
     return (p3drc_Hit){
         .tile = tile,
