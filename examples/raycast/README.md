@@ -1,11 +1,10 @@
-# Raycast Examples
-Several examples demonstrating the raycast library.
+# Raycast Example
+An example demonstrating the raycast library using SDL.
 
 ## Building and Running
-Requires pkg-config plus the graphics library for the example you want to build.
+Requires pkg-config and SDL. Run the following in this directory.
 ```bash
-make # builds the SDL example by default
-./build/sdl
+./build.sh && ./build/a.out
 ```
 
 ## Controls

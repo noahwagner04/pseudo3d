@@ -26,7 +26,6 @@ TBD
 
 ## TODO
 
-- [ ] Create 3 examples: multithreaded SDL, raylib, and terminal (ASCII graphics)
 - [ ] Add helper functions to the raycast library (camera rotation, sane default structs for fog and lighting, etc.)
 - [ ] Add documentation to the `p3d_raycast.h` header
 - [ ] Add [voxelspace](https://github.com/s-macke/VoxelSpace) library
