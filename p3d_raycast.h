@@ -494,7 +494,7 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         double light = p3drc__get_light(scene, hit.depth * camera->FOV, hit.side);
         double fog = p3drc__get_fog(scene, hit.depth * camera->FOV);
 
-        // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        // per-column integer shading: out = (texel * A + B) >> 16, A/B in 16.16
         int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
         int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
         int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
@@ -571,7 +571,7 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
         double light = flags & P3DRC_SPRITE_NO_LIGHTING ? 1.0 : p3drc__get_light(scene, local_y * camera->FOV, -1);
         double fog = flags & P3DRC_SPRITE_NO_FOG ? 0.0 : p3drc__get_fog(scene, local_y * camera->FOV);
 
-        // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        // per-column integer shading: out = (texel * A + B) >> 16, A/B in 16.16
         int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
         int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
         int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
