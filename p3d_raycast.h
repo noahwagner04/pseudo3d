@@ -52,11 +52,11 @@
  *     p3drc_Target target = { pixels, width * 4, width, height, z_buffer,
  *                             (double)width / height };
  *     while (running) {
- *         update(&app);
- *         int sprite_count;
- *         p3drc_Sprites *sprites = get_sprites(&app->entities, &sprite_count);
+ *         // ... game update ...
+ *         // ... build p3drc_Sprite *sprites array from scene entities ...
+ *         // ... set sprite_count = |sprites| ...
  *         p3drc_render(&scene, &cam, &target, sprites, sprite_count);
- *         display(target.pixels);
+ *         // display the modified target.pixels buffer to the screen
  *     }
  *
  * Multi-threaded example
@@ -65,15 +65,17 @@
  *     column range; pixels and z_buffer stay shared. Sort once, then render
  *     slices in parallel:
  *
+ *     // ... game update ...
+ *     // ... setup scene, cam, target, sprites, and sprite_count ...
  *     p3drc_sort_sprites(&cam, sprites, sprite_count);
- *     for (int t = 0; t < thread_count; t++) {
+ *     for (int t = 0; t < num_threads; t++) {
  *         p3drc_Target slice = target;
  *         slice.start = t * width / num_threads;
  *         slice.end = (t + 1) * width / num_threads;
- *         Thread_Args args = {&scene, &cam, &slice, sprites, sprite_count};
- *         start_thread(p3drc_render_slice, args);
+ *         MyThreadArgs args = {&scene, &cam, &slice, sprites, sprite_count};
+ *         // ... call p3drc_render_slice with args on a separate thread ...
  *     }
- *     join_threads();
+ *     // ... join all render threads ...
  *
  * Limitations
  *
