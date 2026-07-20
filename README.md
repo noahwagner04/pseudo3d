@@ -13,7 +13,7 @@ A collection of stb-style single-header libraries written in C99 for pseudo-3D r
 A simple raycast engine in the spirit of Wolfenstein 3D. The core is based on Lode Vandevenne's [excellent tutorial series](https://lodev.org/cgtutor/raycasting.html), with several additions:
 
 - Sub-pixel accurate texture mapping (no ugly rounding artifacts at low resolutions)
-- Depth-based lighting and fog with configurable color, falloff, and face shading
+- Depth-based fog and lighting with configurable color, falloff, and face shading
 - Sliding doors (Wolfenstein style)
 - Vertical camera movement and pitch rotation
 - Per-face wall textures
@@ -26,7 +26,7 @@ TBD
 
 ## TODO
 
-- [ ] Add helper functions to the raycast library (camera rotation, sane default structs for fog and lighting, etc.)
+- [ ] Add helper functions to the raycast library (camera rotation, sane default structs for fog and lighting, create target slice, etc.)
 - [ ] Add documentation to the `p3d_raycast.h` header
 - [ ] Add [voxelspace](https://github.com/s-macke/VoxelSpace) library
 - [ ] Maybe add a [DOOM-style](https://www.youtube.com/watch?v=HQYsFshbkYw) library?
