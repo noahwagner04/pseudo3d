@@ -1,14 +1,93 @@
 /* p3d_raycast - v0.1 - simple raycast render engine - Noah Wagner
  * See end of file for license information.
  *
+ * Do this:
+ *     #define P3D_RAYCAST_IMPLEMENTATION
+ * before you include this file in *one* C file to create the implementation.
+ *
+ * Optionally #define P3DRC_ASSERT(x) and P3DRC_QSORT before the #include to
+ * replace assert and stdlib qsort.
+ *
+ * The library performs no heap allocation and has no dependencies beyond
+ * libc. All buffers (map tiles, atlas pixels, output pixels, z buffer,
+ * sprites) are provided by the caller. Output is a software-rendered RGBA32
+ * pixel buffer; display it with any graphics library.
  */
+
+/*
+DOCUMENTATION
+
+Coordinates & units
+
+    The map is a grid of NxN tiles in the x/y plane; world height runs 0
+    (floor) to 1 (ceiling). camera pos_z is the eye height (0.5 = centered).
+    Camera dir must be a unit vector. Pitch shifts the screen vertically.
+    Horizontal FOV = 2*atan(aspect_ratio / (2*FOV)).
+
+Texture atlas
+
+    One RGBA32 image holding a grid of subimage_size x subimage_size tiles,
+    indexed row-major: texture n is at column (n % _cols), row (n / _cols).
+    All texture references (tiles, sprites, floor, ceiling) index this grid.
+    _cols = width / subimage_size and _rows = height / subimage_size must be
+    filled by the caller.
+
+Draw order
+
+    Scenes should be drawn in the following order:
+    1. Planes: Must be drawn first because they override the canvas and do not
+       write to the depth buffer.
+    2. Walls: Must be drawn second since they generate the per-column z-buffer
+       required by sprite rendering.
+    3. Sprites: Must be sorted using p3drc_sort_sprites and drawn last.
+
+    For convenience, you can use the p3drc_render_sprites or p3drc_render
+    functions to handle this ordering automatically.
+
+Example
+
+    p3drc_Scene scene = { map, atlas, light, fog };
+    p3drc_Camera cam = { .FOV = 0.66, .pos_x = 12, .pos_y = 12, .pos_z = 0.5,
+                         .dir_x = 1, .dir_y = 0 };
+    p3drc_Target target = { pixels, width * 4, width, height, z_buffer,
+                            (double)width / height };
+    while (running) {
+        update(&app);
+        int sprite_count;
+        p3drc_Sprites *sprites = get_sprites(&app->entities, &sprite_count);
+        p3drc_render(&scene, &cam, &target, sprites, sprite_count);
+        display(target.pixels);
+    }
+
+Multi-threaded example
+
+    Give each thread a copy of the target with a disjoint [start, end)
+    column range; pixels and z_buffer stay shared. Sort once, then render
+    slices in parallel:
+
+    p3drc_sort_sprites(&cam, sprites, sprite_count);
+    for (int t = 0; t < thread_count; t++) {
+        p3drc_Target slice = target;
+        slice.start = t * width / num_threads;
+        slice.end = (t + 1) * width / num_threads;
+        Thread_Args args = {&scene, &cam, &slice, sprites, sprite_count};
+        start_thread(p3drc_render_slice, args);
+    }
+    join_threads();
+
+Limitations
+
+    - single-height walls; floor fixed at 0, ceiling at 1
+    - sprites are one tile in size and can't be moved vertically
+    - the only transparency is the sprite alpha == 0 cutout
+    - pitch rotation is a horizon shear; large pitch distorts
+*/
+
 #ifndef P3D_RAYCAST_H
 #define P3D_RAYCAST_H
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
-
-// This library performs no heap allocation. All buffers are provided by the caller.
 
 #ifndef P3DRC_ASSERT
 #include <assert.h>
@@ -37,9 +116,9 @@ enum p3drc_side {
 #define P3DRC_OPEN_MAX 255
 
 typedef struct p3drc_tile {
-    uint8_t type;
-    uint8_t open;
-    uint16_t tex[4];
+    uint8_t type;    // enum p3drc_tile_type
+    uint8_t open;    // doors only: 0 = closed, P3DRC_OPEN_MAX = fully open
+    uint16_t tex[4]; // texture per face, indexed by enum p3drc_face
 } p3drc_Tile;
 
 #define P3DRC_WALL(n, e, s, w) ((p3drc_Tile){ .type = P3DRC_TILE_WALL, .tex = {(n), (e), (s), (w)} })
@@ -52,8 +131,8 @@ typedef struct p3drc_tile {
 #define P3DRC_SPRITE_NO_FOG      (1 << 2)
 
 typedef struct p3drc_hit {
-    p3drc_Tile tile;
-    double depth;
+    p3drc_Tile tile;      // zeroed if the ray left the map
+    double depth;         // distance to the hit in units of |dir|
     enum p3drc_side side;
     enum p3drc_face face;
 } p3drc_Hit;
@@ -66,31 +145,31 @@ typedef struct p3drc_map {
 
 typedef struct p3drc_sprite {
     double pos_x, pos_y;
-    double _dist; // set by p3drc_sort_sprites
+    double _dist;        // set by p3drc_sort_sprites
     uint16_t texture;
-    uint8_t flags;
+    uint8_t flags;       // P3DRC_SPRITE_* bits
 } p3drc_Sprite;
 
 typedef struct p3drc_atlas {
-    uint8_t *pixels; // RGBA32
-    int pitch;
+    uint8_t *pixels;   // RGBA32
+    int pitch;         // bytes per row; width * 4 if tightly packed
     int width, height;
-    int subimage_size;
-    int _rows, _cols;
+    int subimage_size; // texture tile size in pixels
+    int _rows, _cols;  // height / subimage_size, width / subimage_size
 } p3drc_Atlas;
 
 typedef struct p3drc_light {
-    double red, green, blue;
-    double falloff;
-    double ambient;
-    double brightness;
-    double shade_strength;
+    double red, green, blue; // light color multipliers, [0, 1]
+    double falloff;          // light = falloff / depth
+    double ambient;          // lower clamp on light
+    double brightness;       // upper clamp on light
+    double shade_strength;   // multiplier applied to shade_face walls
     enum p3drc_side shade_face;
 } p3drc_Light;
 
 typedef struct p3drc_fog {
-    double red, green, blue;
-    double density;
+    double red, green, blue; // fog color, [0, 1]
+    double density;          // fog = depth * density, clamped to 1
 } p3drc_Fog;
 
 typedef struct p3drc_scene {
@@ -101,27 +180,59 @@ typedef struct p3drc_scene {
 } p3drc_Scene;
 
 typedef struct p3drc_camera {
-    double FOV;
-    double pitch;
-    double pos_x, pos_y, pos_z;
-    double dir_x, dir_y;
+    double FOV;                 // see DOCUMENTATION; 0.66 is a good default
+    rouble pitch;               // vertical rotation, in screen heights
+    double pos_x, pos_y, pos_z; // pos_z: 0 = floor, 1 = ceiling
+    double dir_x, dir_y;        // must be a unit vector
 } p3drc_Camera;
 
 typedef struct p3drc_target {
-    uint8_t *pixels; // RGBA32
-    int pitch;
+    uint8_t *pixels;     // RGBA32
+    int pitch;           // bytes per row; width * 4 if tightly packed
     int width, height;
-    double *z_buffer; // at least width elements
-    double aspect_ratio;
-    int start, end; // column slice for threaded rendering
+    double *z_buffer;    // at least width elements
+    double aspect_ratio; // should match the on-screen aspect ratio
+    int start, end;      // column slice, see multi-threaded example
 } p3drc_Target;
 
+/* Casts one ray through the map (weapon hitscans, line of sight, ...).
+ * Pass a unit dir to get depth in world units. Doors count as hit only where
+ * the ray crosses the closed part of the door slab.
+ *
+ * You may also pass the start and end points. Collision check is simple:
+ * if (p3drc_cast_ray(scene, startX, startY, endX, endY) < 1) return true;
+ * else return false;
+ */
 p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, double dir_x, double dir_y);
+
+/* Sorts sprites in place by distance. Call once per frame before rendering
+ * sprites; p3drc_render does it for you.
+ */
 void p3drc_sort_sprites(const p3drc_Camera *camera, p3drc_Sprite *sprites, int sprite_count);
+
+/* Renders one horizontal plane at the given world height (0 = floor,
+ * 1 = ceiling). Called by p3drc_render_slice using scene floor_tex/ceiling_tex.
+ * This function must run before render_walls.
+ */
 void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, int tex_num, double height);
+
+/* Renders walls and fills target->z_buffer for every column in the slice,
+ * including misses. Must run before p3drc_render_sprites.
+ */
 void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target);
+
+/* Renders sprites back to front against the z buffer. Sprites must already
+ * be sorted.
+ */
 void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, const p3drc_Sprite *sprites, int sprite_count);
+
+/* Renders the target's [start, end) column slice: planes, walls, sprites.
+ * Does not sort sprites, so slices can run on separate threads after a
+ * single sort. sprites may be NULL with count 0.
+ */
 void p3drc_render_slice(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, const p3drc_Sprite *sprites, int sprite_count);
+
+// Convenience: sorts sprites and renders the full target.
 void p3drc_render(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, p3drc_Sprite *sprites, int sprite_count);
 
 #endif // P3D_RAYCAST_H

@@ -26,8 +26,8 @@ TBD
 
 ## TODO
 
+- [x] Add documentation to the `p3d_raycast.h` header
 - [ ] Add helper functions to the raycast library (camera rotation, sane default structs for fog and lighting, create target slice, etc.)
-- [ ] Add documentation to the `p3d_raycast.h` header
 - [ ] Add [voxelspace](https://github.com/s-macke/VoxelSpace) library
 - [ ] Maybe add a [DOOM-style](https://www.youtube.com/watch?v=HQYsFshbkYw) library?
 
