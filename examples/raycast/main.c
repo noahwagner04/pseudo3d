@@ -138,8 +138,6 @@ SDL_AppResult raycast_init(struct app_state *app) {
         .width = atlas_img->w,
         .height = atlas_img->h,
         .subimage_size = 64,
-        ._cols = atlas_img->w / 64,
-        ._rows = atlas_img->h / 64
     };
 
     // build tile map from int codes

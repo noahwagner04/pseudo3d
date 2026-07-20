@@ -19,18 +19,18 @@
  *
  * Coordinates & units
  *
- *     The map is a grid of NxN tiles in the x/y plane; world height runs 0
+ *     The map is a grid of NxM tiles in the x/y plane; world height runs 0
  *     (floor) to 1 (ceiling). camera pos_z is the eye height (0.5 = centered).
  *     Camera dir must be a unit vector. Pitch shifts the screen vertically.
  *     Horizontal FOV = 2*atan(aspect_ratio / (2*FOV)).
  *
  * Texture atlas
  *
- *     One RGBA32 image holding a grid of subimage_size x subimage_size tiles,
- *     indexed row-major: texture n is at column (n % _cols), row (n / _cols).
- *     All texture references (tiles, sprites, floor, ceiling) index this grid.
- *     _cols = width / subimage_size and _rows = height / subimage_size must be
- *     filled by the caller.
+ *     One RGBA32 image holding a grid of subimage_size sized tiles, where
+ *     cols = width / subimage_size and rows = height / subimage_size. Texture n
+ *     is at column (n % cols), row (n / cols). All texture references (tiles,
+ *     sprites, floor, ceiling) index this grid.
+ *
  *
  * Draw order
  *
@@ -155,7 +155,6 @@ typedef struct p3drc_atlas {
     int pitch;         // bytes per row; width * 4 if tightly packed
     int width, height;
     int subimage_size; // texture tile size in pixels
-    int _rows, _cols;  // height / subimage_size, width / subimage_size
 } p3drc_Atlas;
 
 typedef struct p3drc_light {
@@ -362,14 +361,16 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
 void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, int tex_num, double height) {
     P3DRC_ASSERT(scene != NULL && camera != NULL && target != NULL);
     P3DRC_ASSERT(scene->atlas.pixels != NULL && target->pixels != NULL);
-    P3DRC_ASSERT(tex_num >= 0 && tex_num < scene->atlas._rows * scene->atlas._cols);
+    int cols = scene->atlas.width / scene->atlas.subimage_size;
+    int rows = scene->atlas.height / scene->atlas.subimage_size;
+    P3DRC_ASSERT(tex_num >= 0 && tex_num < rows * cols);
     P3DRC_ASSERT(target->start >= 0 && target->end <= target->width && target->start < target->end);
 
     double horizon = target->height / 2.0 + camera->pitch * target->height;
     double plane_x = -camera->dir_y * target->aspect_ratio / 2.0;
     double plane_y = camera->dir_x * target->aspect_ratio / 2.0;
-    int base_tex_x = tex_num % scene->atlas._cols * scene->atlas.subimage_size;
-    int base_tex_y = tex_num / scene->atlas._cols * scene->atlas.subimage_size;
+    int base_tex_x = tex_num % cols * scene->atlas.subimage_size;
+    int base_tex_y = tex_num / cols * scene->atlas.subimage_size;
 
     double ray_dir_xl = camera->dir_x * camera->FOV - plane_x;
     double ray_dir_yl = camera->dir_y * camera->FOV - plane_y;
@@ -398,13 +399,13 @@ void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         double world_y = camera->pos_y + ray_dir_yl * row_dist + step_y * target->start;
         double light = p3drc__get_light(scene, row_dist * camera->FOV, -1);
         double fog = p3drc__get_fog(scene, row_dist * camera->FOV);
- 
+
         // 32.32 fixed-point world coordinates
         int64_t wx = (int64_t)(world_x * 4294967296.0);
         int64_t wy = (int64_t)(world_y * 4294967296.0);
         int64_t sx = (int64_t)(step_x * 4294967296.0);
         int64_t sy = (int64_t)(step_y * 4294967296.0);
- 
+
         // per-row integer shading: out = (texel * A + B) >> 16, A/B in 16.16
         int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
         int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
@@ -412,7 +413,7 @@ void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         int32_t br = (int32_t)(fog * fr * 255.0 * 65536.0);
         int32_t bg = (int32_t)(fog * fg * 255.0 * 65536.0);
         int32_t bb = (int32_t)(fog * fb * 255.0 * 65536.0);
- 
+
         int sub = scene->atlas.subimage_size;
         uint8_t *out = target->pixels + target->start * 4 + y * target->pitch;
         for (int x = target->start; x < target->end; x++, wx += sx, wy += sy, out += 4) {
@@ -437,6 +438,7 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
     P3DRC_ASSERT(target->start >= 0 && target->end <= target->width && target->start < target->end);
 
     int sub = scene->atlas.subimage_size;
+    int cols = scene->atlas.width / sub;
     double plane_x = -camera->dir_y * target->aspect_ratio / 2.0;
     double plane_y = camera->dir_x * target->aspect_ratio / 2.0;
     double lr = scene->light.red, lg = scene->light.green, lb = scene->light.blue;
@@ -476,9 +478,9 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         if (face == P3DRC_FACE_W || face == P3DRC_FACE_S) tex_x = sub - tex_x - 1;
 
         int tex_num = hit.tile.tex[face];
-        tex_x += tex_num % scene->atlas._cols * sub;
+        tex_x += tex_num % cols * sub;
 
-        int y_offset = tex_num / scene->atlas._cols * sub;
+        int y_offset = tex_num / cols * sub;
         int draw_start = (int)ceil(top - 0.5);
         int draw_end = (int)ceil(bottom - 0.5);
         if (draw_start < 0) draw_start = 0;
@@ -522,6 +524,7 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
     P3DRC_ASSERT(target->start >= 0 && target->end <= target->width && target->start < target->end);
 
     int sub = scene->atlas.subimage_size;
+    int cols = scene->atlas.width / sub;
     double sdir_x = camera->dir_x * camera->FOV;
     double sdir_y = camera->dir_y * camera->FOV;
     double plane_x = -camera->dir_y * target->aspect_ratio / 2.0;
@@ -562,8 +565,8 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
 
         double step_x = (double)sub / pw;
         double step_y = (double)sub / ph;
-        int base_tex_x = tex_num % scene->atlas._cols * sub;
-        int base_tex_y = tex_num / scene->atlas._cols * sub;
+        int base_tex_x = tex_num % cols * sub;
+        int base_tex_y = tex_num / cols * sub;
 
         double light = flags & P3DRC_SPRITE_NO_LIGHTING ? 1.0 : p3drc__get_light(scene, local_y * camera->FOV, -1);
         double fog = flags & P3DRC_SPRITE_NO_FOG ? 0.0 : p3drc__get_fog(scene, local_y * camera->FOV);
@@ -606,10 +609,9 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
 void p3drc_render_slice(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Target *target, const p3drc_Sprite *sprites, int sprite_count) {
     P3DRC_ASSERT(scene != NULL && camera != NULL && target != NULL);
 
-    int max_tex = scene->atlas._rows * scene->atlas._cols;
-    if (scene->map.floor_tex >= 0 && scene->map.floor_tex < max_tex)
+    if (scene->map.floor_tex >= 0)
         p3drc_render_plane(scene, camera, target, scene->map.floor_tex, 0);
-    if (scene->map.ceiling_tex >= 0 && scene->map.ceiling_tex < max_tex)
+    if (scene->map.ceiling_tex >= 0)
         p3drc_render_plane(scene, camera, target, scene->map.ceiling_tex, 1);
 
     if (scene->map.tiles != NULL)
