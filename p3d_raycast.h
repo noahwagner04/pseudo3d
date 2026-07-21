@@ -5,7 +5,7 @@
  *     #define P3D_RAYCAST_IMPLEMENTATION
  * before you include this file in *one* C file to create the implementation.
  *
- * Optionally #define P3DRC_ASSERT(x) and P3DRC_QSORT before the #include to
+ * Optionally #define P3DRC_ASSERT and P3DRC_QSORT before the #include to
  * replace assert and stdlib qsort.
  *
  * The library performs no heap allocation and has no dependencies beyond
@@ -91,7 +91,7 @@
 
 #ifndef P3DRC_ASSERT
 #include <assert.h>
-#define P3DRC_ASSERT(x) assert(x)
+#define P3DRC_ASSERT assert
 #endif
 
 enum p3drc_tile_type {
@@ -371,6 +371,8 @@ void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
     P3DRC_ASSERT(scene->atlas.pixels != NULL && target->pixels != NULL);
     int cols = scene->atlas.width / scene->atlas.subimage_size;
     int rows = scene->atlas.height / scene->atlas.subimage_size;
+    // suppress unused variable warning if user disables asserts
+    (void)rows;
     P3DRC_ASSERT(tex_num >= 0 && tex_num < rows * cols);
     P3DRC_ASSERT(target->start >= 0 && target->end <= target->width && target->start < target->end);
 
