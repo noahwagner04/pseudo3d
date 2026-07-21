@@ -140,7 +140,7 @@ SDL_AppResult raycast_init(struct app_state *app) {
         .subimage_size = 64,
     };
 
-    // build tile map from int codes
+    // build tile map from chars
     for (int i = 0; i < MAP_WIDTH * MAP_HEIGHT; i++)
         tiles[i] = legend[(unsigned char)map_str[i]];
 
