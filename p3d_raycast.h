@@ -279,8 +279,8 @@ void p3drc_sort_sprites(const p3drc_Camera *camera, p3drc_Sprite *sprites, int s
 p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, double dir_x, double dir_y) {
     P3DRC_ASSERT(scene != NULL && scene->map.tiles != NULL);
 
-    int map_x = (int)pos_x;
-    int map_y = (int)pos_y;
+    int map_x = floor(pos_x);
+    int map_y = floor(pos_y);
 
     if (map_x >= scene->map.width || map_x < 0 || map_y >= scene->map.height || map_y < 0)
         return (p3drc_Hit){0};
