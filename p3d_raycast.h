@@ -283,6 +283,9 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
     int map_x = (int)pos_x;
     int map_y = (int)pos_y;
 
+    if (map_x >= scene->map.width || map_x < 0 || map_y >= scene->map.height || map_y < 0)
+        return (p3drc_Hit){0};
+
     double dx = (dir_x == 0.0) ? 1e30 : fabs(1.0 / dir_x);
     double dy = (dir_y == 0.0) ? 1e30 : fabs(1.0 / dir_y);
 
@@ -296,6 +299,19 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
     int type = P3DRC_TILE_EMPTY;
     enum p3drc_side side = sx < sy ? P3DRC_SIDE_V : P3DRC_SIDE_H;
     double entry = 0;
+
+    p3drc_Tile start_tile = scene->map.tiles[map_x + map_y * scene->map.width];
+    if (start_tile.type == P3DRC_TILE_WALL) {
+        enum p3drc_face face;
+        if (side == P3DRC_SIDE_V) face = step_x < 0 ? P3DRC_FACE_W : P3DRC_FACE_E;
+        else face = step_y < 0 ? P3DRC_FACE_N : P3DRC_FACE_S;
+        return (p3drc_Hit){
+            .tile = start_tile,
+            .depth = side == P3DRC_SIDE_V ? sx : sy,
+            .side = side,
+            .face = face
+        };
+    }
 
     while (true) {
         if (map_x >= scene->map.width || map_x < 0 || map_y >= scene->map.height || map_y < 0) {
@@ -343,15 +359,6 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
     enum p3drc_face face;
     if (side == P3DRC_SIDE_V) face = step_x < 0 ? P3DRC_FACE_E : P3DRC_FACE_W;
     else face = step_y < 0 ? P3DRC_FACE_S : P3DRC_FACE_N;
-
-    // started inside a solid tile: advance once so depth lands on the exit face
-    if (entry == 0 && type == P3DRC_TILE_WALL) {
-        sx += dx;
-        sy += dy;
-        // reverse face (N <-> S, E <-> W)
-        face = (face + 2) % 4;
-    }
-
     return (p3drc_Hit){
         .tile = tile,
         .depth = side == P3DRC_SIDE_V ? sx - dx : sy - dy,
