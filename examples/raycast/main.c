@@ -155,9 +155,7 @@ SDL_AppResult raycast_init(struct app_state *app) {
 }
 
 void raycast_render(struct app_state *app) {
-    int pitch;
-    SDL_LockTexture(app->texture, NULL, (void **)&target.pixels, &pitch);
-    target.pitch = pitch;
+    SDL_LockTexture(app->texture, NULL, (void **)&target.pixels, &target.pitch);
     p3drc_render(&scene, &camera, &target, sprites, SPRITE_COUNT);
     SDL_UnlockTexture(app->texture);
     SDL_RenderTexture(app->renderer, app->texture, NULL, NULL);
