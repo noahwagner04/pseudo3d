@@ -163,7 +163,7 @@ void raycast_render(struct app_state *app) {
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     (void)argc; (void)argv;
-    *appstate = malloc(sizeof(struct app_state));
+    *appstate = SDL_malloc(sizeof(struct app_state));
     struct app_state *app = *appstate;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -278,5 +278,5 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     SDL_DestroyWindow(app->window);
     SDL_DestroyTexture(app->texture);
     SDL_DestroySurface(atlas_img);
-    SDL_Quit();
+    SDL_free(app);
 }
