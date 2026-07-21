@@ -88,8 +88,6 @@
 #ifndef P3D_RAYCAST_H
 #define P3D_RAYCAST_H
 #include <stdint.h>
-#include <stdbool.h>
-#include <math.h>
 
 #ifndef P3DRC_ASSERT
 #include <assert.h>
@@ -239,6 +237,7 @@ void p3drc_render(const p3drc_Scene *scene, const p3drc_Camera *camera, p3drc_Ta
 #endif // P3D_RAYCAST_H
 
 #ifdef P3D_RAYCAST_IMPLEMENTATION
+#include <math.h>
 
 #ifndef P3DRC_QSORT
 #include <stdlib.h>
@@ -313,7 +312,7 @@ p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, d
         };
     }
 
-    while (true) {
+    while (1) {
         if (map_x >= scene->map.width || map_x < 0 || map_y >= scene->map.height || map_y < 0) {
             tile = (p3drc_Tile){0};
             break;
@@ -386,7 +385,7 @@ void p3drc_render_plane(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
     double ray_dir_xr = camera->dir_x * camera->FOV + plane_x;
     double ray_dir_yr = camera->dir_y * camera->FOV + plane_y;
 
-    bool is_below = height < camera->pos_z;
+    int is_below = height < camera->pos_z;
     int draw_start = is_below ? (int)ceil(horizon - 0.5) : 0;
     int draw_end = is_below ? target->height : (int)ceil(horizon - 0.5);
 
