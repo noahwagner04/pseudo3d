@@ -65,8 +65,9 @@
  *     column range; pixels and z_buffer stay shared. Sort once, then render
  *     slices in parallel:
  *
- *     // ... game update ...
  *     // ... setup scene, cam, target, sprites, and sprite_count ...
+ *
+ *     // ... game update ...
  *     p3drc_sort_sprites(&cam, sprites, sprite_count);
  *     for (int t = 0; t < num_threads; t++) {
  *         p3drc_Target slice = target;
