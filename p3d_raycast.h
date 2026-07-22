@@ -80,10 +80,10 @@
  *
  * Limitations
  *
- *     - single-height walls; floor fixed at 0, ceiling at 1
+ *     - single-height walls: floor fixed at 0, ceiling at 1
  *     - sprites are one tile in size and can't be moved vertically
- *     - the only transparency is the sprite alpha == 0 cutout
- *     - pitch rotation is a horizon shear; large pitch distorts
+ *     - pitch rotation is a horizon shear: large pitch distorts
+ *     - software rendered: can be slow at higher resolutions
  */
 
 #ifndef P3D_RAYCAST_H
@@ -582,7 +582,7 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
         double light = flags & P3DRC_SPRITE_NO_LIGHTING ? 1.0 : p3drc__get_light(scene, local_y * camera->FOV, -1);
         double fog = flags & P3DRC_SPRITE_NO_FOG ? 0.0 : p3drc__get_fog(scene, local_y * camera->FOV);
 
-        // per-column integer shading: out = (texel * A + B) >> 16, A/B in 16.16
+        // per-sprite integer shading: out = (texel * A + B) >> 16, A/B in 16.16
         int32_t ar = (int32_t)((1.0 - fog) * light * lr * 65536.0);
         int32_t ag = (int32_t)((1.0 - fog) * light * lg * 65536.0);
         int32_t ab = (int32_t)((1.0 - fog) * light * lb * 65536.0);
@@ -605,9 +605,14 @@ void p3drc_render_sprites(const p3drc_Scene *scene, const p3drc_Camera *camera, 
             for (int y = draw_start_y; y < draw_end_y; y++, tex_y_fp += step_y_fp, out += target->pitch) {
                 uint8_t *c = scene->atlas.pixels + tex_x * 4 + (base_tex_y + (tex_y_fp >> 16)) * scene->atlas.pitch;
                 if (c[3] == 0) continue;
-                int32_t r = (c[0] * ar + br) >> 16;
-                int32_t g = (c[1] * ag + bg) >> 16;
-                int32_t b = (c[2] * ab + bb) >> 16;
+                // 16.16 fixed point alpha
+                int32_t alpha = c[3] * 65536 / 255;
+                uint8_t r_mix = out[0] + (((c[0] - out[0]) * alpha) >> 16);
+                uint8_t g_mix = out[1] + (((c[1] - out[1]) * alpha) >> 16);
+                uint8_t b_mix = out[2] + (((c[2] - out[2]) * alpha) >> 16);
+                int32_t r = (r_mix * ar + br) >> 16;
+                int32_t g = (g_mix * ag + bg) >> 16;
+                int32_t b = (b_mix * ab + bb) >> 16;
                 out[0] = r > 255 ? 255 : r;
                 out[1] = g > 255 ? 255 : g;
                 out[2] = b > 255 ? 255 : b;
