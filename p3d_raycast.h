@@ -677,7 +677,7 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 THIRD PARTY NOTICES
 --------------------------------------------------------------------------------
-Portions of this software are derived from Lode Vandevenne's raycasting
+Portions of the raycaster are derived from Lode Vandevenne's raycasting
 tutorial series (https://lodev.org/cgtutor/raycasting.html), licensed as
 follows:
 
@@ -707,4 +707,5 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
 */

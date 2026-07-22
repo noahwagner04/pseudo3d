@@ -1,4 +1,4 @@
-Portions of this software are derived from Lode Vandevenne's raycasting
+Portions of the raycaster are derived from Lode Vandevenne's raycasting
 tutorial series (https://lodev.org/cgtutor/raycasting.html), licensed as
 follows:
 
