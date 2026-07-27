@@ -200,7 +200,7 @@ typedef struct p3drc_target {
  * the ray crosses the closed part of the door slab.
  *
  * You may also pass the start and end points. Collision check is simple:
- * if (p3drc_cast_ray(scene, start_x, start_y, end_x, end_y) < 1) return true;
+ * if (p3drc_cast_ray(scene, start_x, start_y, end_x, end_y).depth < 1) return true;
  * else return false;
  */
 p3drc_Hit p3drc_cast_ray(const p3drc_Scene *scene, double pos_x, double pos_y, double dir_x, double dir_y);
