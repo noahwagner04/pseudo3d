@@ -498,9 +498,9 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
         if (draw_end > target->height) draw_end = target->height;
 
         double step = sub / (bottom - top);
-        // 16.16 fixed-point for texture sampling
-        uint32_t step_fp = (uint32_t)(step * 65536.0);
-        uint32_t tex_y_fp = (uint32_t)((draw_start + 0.5 - top) * step * 65536.0);
+        // 32.32 fixed-point for texture sampling
+        uint64_t step_fp = (uint64_t)(step * 4294967296.0);
+        uint64_t tex_y_fp = (uint64_t)((draw_start + 0.5 - top) * step * 4294967296.0);
 
         double light = p3drc__get_light(scene, hit.depth * camera->FOV, hit.side);
         double fog = p3drc__get_fog(scene, hit.depth * camera->FOV);
@@ -515,7 +515,7 @@ void p3drc_render_walls(const p3drc_Scene *scene, const p3drc_Camera *camera, p3
 
         uint8_t *out = target->pixels + x * 4 + draw_start * target->pitch;
         for (int y = draw_start; y < draw_end; y++, tex_y_fp += step_fp, out += target->pitch) {
-            uint8_t *c = scene->atlas.pixels + tex_x * 4 + ((tex_y_fp >> 16) + y_offset) * scene->atlas.pitch;
+            uint8_t *c = scene->atlas.pixels + tex_x * 4 + ((tex_y_fp >> 32) + y_offset) * scene->atlas.pitch;
             int32_t r = (c[0] * ar + br) >> 16;
             int32_t g = (c[1] * ag + bg) >> 16;
             int32_t b = (c[2] * ab + bb) >> 16;
